@@ -1,0 +1,43 @@
+# Environment variables and secrets
+.env
+*.env.local
+
+# Personal scripts / guides (untracked)
+demo_walkthrough_guide.md
+*demo_guide*.md
+
+# Python artifacts and caches
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.pytest_cache/
+.ruff_cache/
+venv/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Databases and temporary test storage
+data/*.db
+data/*.sqlite
+data/test_*.db
+data/uploads/*
+!data/uploads/.gitkeep
+
+# IDEs and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ephemeral artifacts and temporary analysis scratchpads
+/tmp/
+*.tmp
+*.log
+artifacts/*
+!artifacts/.gitkeep

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Stealc Core (stealc_stage1.bin)",
+    "path": "data/samples/stealc_stage1.bin"
+  },
+  {
+    "name": "Lumma Stealer (lumma_dropper.bin)",
+    "path": "data/samples/lumma_dropper.bin"
+  },
+  {
+    "name": "Redline Stealer (redline_stealer.bin)",
+    "path": "data/samples/redline_stealer.bin"
+  }
+]

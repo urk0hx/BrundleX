@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ 'dark' if dark_theme else 'light' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BrundleX: AI-Guided Malware Triage & Predictive Trait Studio</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    :root {
+      --pico-font-size: 92%;
+    }
+    /* Explicit dark theme tokens to guarantee immediate switch when body swaps */
+    body[data-theme="dark"] {
+      color-scheme: dark;
+      --pico-background-color: rgb(19, 22.5, 30.5);
+      --pico-card-background-color: #181c25;
+      --pico-card-sectioning-background-color: rgb(26, 30.5, 40.25);
+      --pico-muted-border-color: #202632;
+      --pico-color: #c2c7d0;
+      --pico-muted-color: #7b8495;
+    }
+    /* Explicit warm cream light theme tokens */
+    body[data-theme="light"] {
+      color-scheme: light;
+      --pico-background-color: #f7f5f0;
+      --pico-card-background-color: #fdfbf7;
+      --pico-card-sectioning-background-color: #ede9e0;
+      --pico-muted-border-color: #d8d2c4;
+      --pico-color: #2b2f36;
+      --pico-muted-color: #636b78;
+    }
+    body {
+      padding-top: 1rem;
+      padding-bottom: 2rem;
+      background-color: var(--pico-background-color);
+      color: var(--pico-color);
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--pico-muted-border-color);
+      padding-bottom: 0.75rem;
+    }
+    .header-bar h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    /* THEME TOGGLE: Perfectly centered circular button */
+    .theme-circle-btn {
+      width: 36px !important;
+      height: 36px !important;
+      min-width: 36px !important;
+      min-height: 36px !important;
+      border-radius: 50% !important;
+      background-color: var(--pico-card-sectioning-background-color);
+      border: 1px solid var(--pico-muted-border-color);
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      cursor: pointer;
+      margin: 0 !important;
+      padding: 0 !important;
+      line-height: 1 !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+      text-decoration: none;
+    }
+    .theme-circle-btn:hover {
+      background-color: var(--pico-muted-border-color);
+      transform: scale(1.05);
+    }
+    .theme-circle-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* KPI METRICS ROW: Aligned 330px left column + 1fr right column */
+    .kpi-row-wrapper {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 1.25rem;
+      align-items: stretch;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 992px) {
+      .kpi-row-wrapper {
+        grid-template-columns: 1fr;
+      }
+    }
+    .kpi-row-wrapper {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 1.25rem;
+      align-items: stretch;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 992px) {
+      .kpi-row-wrapper {
+        grid-template-columns: 1fr;
+      }
+    }
+    .kpi-hash-card {
+      margin-bottom: 0;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      min-height: 148px;
+      box-sizing: border-box;
+      background: var(--pico-card-background-color);
+    }
+    .kpi-sub-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+      align-items: stretch;
+    }
+    @media (max-width: 768px) {
+      .kpi-sub-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    .kpi-card {
+      margin-bottom: 0;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+      background: var(--pico-card-background-color);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      min-height: 148px;
+      box-sizing: border-box;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .kpi-card:hover {
+      border-color: var(--pico-primary);
+    }
+    .kpi-card small, .kpi-hash-card small {
+      display: block;
+      color: var(--pico-muted-color);
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 0.72rem;
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.06em;
+    }
+    .kpi-card-metric {
+      font-size: 1.45rem;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+    .kpi-card-subtext {
+      font-size: 0.72rem;
+      color: var(--pico-muted-color);
+      margin-top: 0.3rem;
+      font-weight: 500;
+    }
+
+    /* MAIN DUAL PANE LAYOUT */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 992px) {
+      .main-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .sidebar-pane, .studio-pane {
+      margin-bottom: 0;
+    }
+    .sidebar-pane article {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+    }
+
+    .studio-cols {
+      display: grid;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    .studio-cols > article {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    /* Prevent Pico.css tooltips from blowing out or collapsing into vertical rectangles */
+    [data-tooltip]::after {
+      width: 260px;
+      max-width: 280px;
+      white-space: normal !important;
+      text-align: left;
+      line-height: 1.35;
+      word-wrap: break-word;
+      z-index: 1000;
+    }
+    [data-tooltip]::before {
+      z-index: 1001;
+    }
+    @media (max-width: 1200px) {
+      .studio-cols {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stepper {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.25rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--pico-card-sectioning-background-color);
+      border-radius: var(--pico-border-radius);
+      font-size: 0.8rem;
+    }
+    .stepper-step {
+      font-weight: 500;
+      color: var(--pico-muted-color);
+      transition: color 0.2s ease, font-weight 0.2s ease;
+    }
+    .stepper-step.completed {
+      color: #16a34a;
+      font-weight: 600;
+    }
+    .stepper-step.active {
+      color: #0284c7;
+      font-weight: 700;
+      text-decoration: underline;
+    }
+    .chat-box {
+      min-height: 90px;
+      max-height: 460px;
+      overflow-y: auto;
+      border: 1px solid var(--pico-muted-border-color);
+      padding: 0.5rem 0.65rem;
+      border-radius: var(--pico-border-radius);
+      margin-bottom: 0.65rem;
+      background: var(--pico-card-background-color);
+    }
+    .chat-msg {
+      margin-bottom: 0.45rem;
+      padding: 0.4rem 0.65rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .chat-msg .chat-body {
+      word-break: break-word;
+    }
+    .chat-msg table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.35rem 0;
+    }
+    .chat-msg.assistant {
+      background: var(--pico-card-sectioning-background-color);
+      border-left: 3px solid var(--pico-primary);
+    }
+    .chat-msg.user {
+      background: rgba(1, 114, 173, 0.15);
+      border-left: 3px solid #16a34a;
+    }
+    .tab-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--pico-muted-border-color);
+      padding-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      margin-bottom: 0;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.88rem;
+    }
+    .yara-code {
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .reset-btn {
+      background-color: var(--pico-card-sectioning-background-color);
+      color: var(--pico-color);
+      border: 1px solid var(--pico-muted-border-color);
+      font-weight: 600;
+    }
+    .reset-btn:hover:not([disabled]) {
+      background-color: var(--pico-muted-border-color);
+      color: var(--pico-color);
+    }
+    .reset-btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .pin-badge {
+      font-size: 0.75rem;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 2px 4px;
+      margin: 0;
+    }
+    .concept-help {
+      font-size: 0.78rem;
+      color: var(--pico-muted-color);
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+      line-height: 1.35;
+    }
+  </style>
+  <script>
+    function copyText(val, btn) {
+      if (!val) return;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(val).then(() => flashBtn(btn));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = val;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand("copy");
+          flashBtn(btn);
+        } catch (e) {
+          console.error("Copy failed", e);
+        }
+        document.body.removeChild(ta);
+      }
+    }
+
+    function copyAllHashes(btn) {
+      const el = document.getElementById("all-hashes-payload");
+      if (!el) return;
+      const text = el.innerText.trim();
+      copyText(text, btn);
+    }
+    function flashBtn(btn) {
+      if (!btn) return;
+      const originalText = btn.innerText;
+      btn.innerText = "✓ Copied";
+      btn.style.borderColor = "#16a34a";
+      btn.style.color = "#16a34a";
+      setTimeout(() => {
+        btn.innerText = originalText;
+        btn.style.borderColor = "";
+        btn.style.color = "";
+      }, 1500);
+    }
+
+    let lastChatScrollTop = null;
+    let wasNearBottom = true;
+
+    function scrollChatToBottom(force) {
+      const box = document.getElementById("chat-box-stream");
+      if (!box) return;
+      if (force || wasNearBottom) {
+        box.scrollTop = box.scrollHeight;
+      } else if (lastChatScrollTop !== null) {
+        box.scrollTop = lastChatScrollTop;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+      scrollChatToBottom(true);
+    });
+
+    document.addEventListener("htmx:beforeSwap", function(evt) {
+      const box = document.getElementById("chat-box-stream");
+      if (box) {
+        lastChatScrollTop = box.scrollTop;
+        const distanceFromBottom = box.scrollHeight - box.scrollTop - box.clientHeight;
+        wasNearBottom = distanceFromBottom < 50;
+      }
+    });
+
+    document.addEventListener("htmx:afterSwap", function(evt) {
+      scrollChatToBottom(false);
+    });
+  </script>
+</head>
+<body class="container-fluid" id="app-body" data-theme="{{ 'dark' if dark_theme else 'light' }}">
+
+  <!-- HTMX BACKGROUND POLL TRIGGER (ACTIVE WHEN PIPELINE RUNNING) -->
+  {% if pipeline_running %}
+    <div hx-get="/triage/poll" hx-trigger="every 400ms" hx-target="#app-body" hx-swap="outerHTML"></div>
+  {% endif %}
+
+  <!-- TOP HEADER -->
+  <header class="header-bar">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <img src="/static/favicon.png" alt="BrundleX Logo" style="width: 28px; height: 28px; border-radius: 4px; vertical-align: middle;">
+      <h2>BrundleX Triage & Mutation Studio</h2>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <a href="/theme/toggle" class="theme-circle-btn" title="Switch to {{ 'Light' if dark_theme else 'Dark' }} mode">
+        {% if dark_theme %}
+          <!-- Sun icon (for switching to light mode) -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        {% else %}
+          <!-- Moon icon (for switching to dark mode) -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        {% endif %}
+      </a>
+    </div>
+  </header>
+
+  <!-- TELEMETRY KPI METRICS ROW -->
+  <section class="kpi-row-wrapper">
+    <!-- HASH DIVISION (330px ALIGNED WITH SIDEBAR) -->
+    <article class="kpi-hash-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <small style="margin: 0;">Target Binary Hashes</small>
+        {% if state and state.sample_sha256 %}
+          <button type="button" class="outline" title="Copy all computed hashes to clipboard"
+                  onclick="copyAllHashes(this)"
+                  style="padding: 1px 7px; font-size: 0.7rem; margin: 0; border-radius: 4px; line-height: 1.2;">
+            Copy All
+          </button>
+        {% endif %}
+      </div>
+      {% if state and state.sample_sha256 %}
+        <div style="font-size: 0.73rem; font-family: monospace; line-height: 1.4; display: flex; flex-direction: column; justify-content: space-around; flex: 1;">
+          <div><strong style="font-size: 0.73rem;">SHA256:</strong> {{ state.sample_sha256[:18]|upper }}...</div>
+          <div style="color: var(--pico-muted-color);"><strong style="font-size: 0.73rem;">SHA1:</strong> {{ state.sample_sha1[:14]|upper }}...</div>
+          <div style="color: var(--pico-muted-color);"><strong style="font-size: 0.73rem;">MD5:</strong> {{ state.sample_md5[:14]|upper }}...</div>
+          {% if state.pe_hashes and state.pe_hashes.get('imphash') %}
+            <div style="color: #ea580c;"><strong style="font-size: 0.73rem;">IMPHASH:</strong> {{ state.pe_hashes.get('imphash')[:14]|upper }}...</div>
+          {% endif %}
+          {% if state.pe_hashes and state.pe_hashes.get('authentihash') %}
+            <div style="color: #ea580c;"><strong style="font-size: 0.73rem;">AUTHENTIHASH:</strong> {{ state.pe_hashes.get('authentihash')[:14]|upper }}...</div>
+          {% endif %}
+        </div>
+        <div id="all-hashes-payload" style="display: none;">SHA256:{{ state.sample_sha256|upper }}
+SHA1:{{ state.sample_sha1|upper }}
+MD5:{{ state.sample_md5|upper }}{% if state.pe_hashes and state.pe_hashes.get('imphash') %}
+IMPHASH:{{ state.pe_hashes.get('imphash')|upper }}{% endif %}{% if state.pe_hashes and state.pe_hashes.get('authentihash') %}
+AUTHENTIHASH:{{ state.pe_hashes.get('authentihash')|upper }}{% endif %}</div>
+      {% else %}
+        <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; flex: 1; text-align: center;">
+          <strong style="color: var(--pico-muted-color); font-size: 1.15rem;">No Active Target</strong>
+          <span style="font-size: 0.72rem; color: var(--pico-muted-color); margin-top: 0.25rem;">Select or upload a sample below</span>
+        </div>
+      {% endif %}
+    </article>
+
+    <!-- RIGHT METRICS SUB-GRID (SIEM DASHBOARD CARDS) -->
+    <div class="kpi-sub-grid">
+      <article class="kpi-card">
+        <small>Attributed Family</small>
+        <span class="kpi-card-metric" style="color: {{ 'var(--pico-primary)' if state and state.llm_verdict and state.llm_verdict.get('attribution') and state.llm_verdict.get('attribution') != 'Unknown' else 'inherit' }};">
+          {{ state.llm_verdict.get('attribution', 'None') if state and state.llm_verdict else 'None' }}
+        </span>
+        <span class="kpi-card-subtext">{{ (state.file_format ~ ' · ' ~ (state.file_size // 1024) ~ ' KB') if state and state.file_size else 'Awaiting Sample' }}</span>
+      </article>
+      <article class="kpi-card">
+        <small>Confidence</small>
+        <span class="kpi-card-metric" style="color: {{ '#16a34a' if state and state.llm_verdict and state.llm_verdict.get('confidence', 0) >= 0.7 else '#eab308' if state and state.llm_verdict and state.llm_verdict.get('confidence', 0) >= 0.4 else 'var(--pico-muted-color)' }};">
+          {{ "%.1f%%"|format(state.llm_verdict.get('confidence', 0.0) * 100) if state and state.llm_verdict else '0.0%' }}
+        </span>
+        <span class="kpi-card-subtext">{{ (state.traits_extracted_count ~ ' traits matched') if state and state.traits_extracted_count else 'MinHash Kinship' }}</span>
+      </article>
+      <article class="kpi-card">
+        <small>Shannon Entropy</small>
+        <span class="kpi-card-metric" style="color: {{ '#dc2626' if state and state.entropy > 7.0 else '#eab308' if state and state.entropy > 6.0 else '#16a34a' if state and state.entropy > 0 else 'inherit' }};">
+          {{ "%.2f"|format(state.entropy) if state and state.entropy else '0.00' }}
+        </span>
+        <span class="kpi-card-subtext">{% if state and state.entropy %}{% if state.entropy > 7.0 %}High (Packed/Crypted){% elif state.entropy > 6.0 %}Elevated (Obfuscated){% else %}Normal (Unpacked PE){% endif %}{% else %}H = 0.00 (8.0 Max){% endif %}</span>
+      </article>
+      <article class="kpi-card">
+        <small>Pipeline Status</small>
+        {% if pipeline_running or (state and state.status.value == 'in_progress') %}
+          <span class="kpi-card-metric" style="color: #0284c7; font-size: 1.15rem;">
+            IN PROGRESS
+          </span>
+          <span class="kpi-card-subtext">{{ ('Stage: ' ~ state.current_stage|upper) if (state and state.current_stage) else 'Initiating...' }}</span>
+        {% elif state and state.status.value == 'paused_at_gate' %}
+          <span class="kpi-card-metric" style="color: #eab308; font-size: 1.15rem;">
+            PAUSED AT GATE
+          </span>
+          <span class="kpi-card-subtext">{{ state.paused_gate_name or 'Awaiting Approval' }}</span>
+        {% elif state and state.status.value == 'completed' %}
+          <span class="kpi-card-metric" style="color: #16a34a; font-size: 1.15rem;">
+            COMPLETED
+          </span>
+          <span class="kpi-card-subtext">All Gates Passed</span>
+        {% elif state and state.status.value == 'failed' %}
+          <span class="kpi-card-metric" style="color: #dc2626; font-size: 1.15rem;">
+            FAILED
+          </span>
+          <span class="kpi-card-subtext">Execution Error</span>
+        {% else %}
+          <span class="kpi-card-metric" style="color: var(--pico-muted-color); font-size: 1.15rem;">
+            IDLE
+          </span>
+          <span class="kpi-card-subtext">Ready for Ingest</span>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+
+  <!-- MAIN DUAL-PANE WORKSPACE -->
+  <div class="main-layout">
+
+    <!-- LEFT SIDEBAR: CONTROL & GATES (330px WIDTH) -->
+    <aside class="sidebar-pane">
+      
+      <!-- TARGET SELECTION & UPLOAD -->
+      <article>
+        <h5 style="margin-top: 0; margin-bottom: 0.5rem;">Target Binary Selection</h5>
+        
+        <!-- DIRECT FILE UPLOAD -->
+        <form hx-post="/triage/upload" hx-target="#app-body" hx-swap="outerHTML" enctype="multipart/form-data" style="margin-bottom: 0.75rem;">
+          <label for="sample_file" style="font-size: 0.8rem; font-weight: 600;">Upload Local Binary</label>
+          <input type="file" id="sample_file" name="sample_file" required style="font-size: 0.8rem; margin-bottom: 0.35rem;">
+          <button type="submit" class="outline" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; width: 100%; margin-bottom: 0.5rem;">Upload & Target</button>
+        </form>
+
+        <hr style="margin: 0.5rem 0;">
+
+        <!-- TARGET FORM -->
+        <form hx-post="/triage/start" hx-target="#app-body" hx-swap="outerHTML"
+              onsubmit="const btn=document.getElementById('start-triage-btn'); if(btn){btn.setAttribute('aria-busy','true'); btn.innerText='Starting Triage...'; btn.disabled=true;}; const rst=document.getElementById('reset-run-btn'); if(rst){rst.disabled=true;};">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label for="sample_choice" style="font-size: 0.8rem; font-weight: 600; margin-bottom: 2px;">Sample Library</label>
+          </div>
+          <select id="sample_choice" name="sample_choice" 
+                  hx-post="/triage/select_target" hx-target="#app-body" hx-swap="outerHTML"
+                  style="font-size: 0.85rem; margin-bottom: 0.35rem;">
+            <optgroup label="Pinned Samples">
+              {% for ps in pinned_samples %}
+                <option value="{{ ps.id }}" {{ 'selected' if selected_sample_choice == ps.id else '' }}>📌 {{ ps.name }}</option>
+              {% endfor %}
+            </optgroup>
+            <optgroup label="Library Samples">
+              {% for us in unpinned_samples %}
+                <option value="{{ us.id }}" {{ 'selected' if selected_sample_choice == us.id else '' }}>{{ us.name }}</option>
+              {% endfor %}
+              <option value="custom" {{ 'selected' if selected_sample_choice == 'custom' else '' }}>Custom File Path</option>
+            </optgroup>
+          </select>
+
+          <!-- PIN / UNPIN ACTION BUTTON -->
+          {% set is_current_pinned = pinned_samples|selectattr("id", "equalto", selected_sample_choice)|list|length > 0 %}
+          {% set is_current_unpinned = unpinned_samples|selectattr("id", "equalto", selected_sample_choice)|list|length > 0 %}
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5rem;">
+            {% if is_current_pinned %}
+              <button type="button" hx-post="/sample/unpin" hx-vals='{"sample_id": "{{ selected_sample_choice }}"}' hx-target="#app-body" hx-swap="outerHTML" class="pin-badge" title="Unpin from top favorites">
+                <span style="text-decoration: underline;">Unpin favorite</span>
+              </button>
+            {% elif is_current_unpinned %}
+              <button type="button" hx-post="/sample/pin" hx-vals='{"sample_id": "{{ selected_sample_choice }}"}' hx-target="#app-body" hx-swap="outerHTML" class="pin-badge" title="Pin to top favorites">
+                <span style="text-decoration: underline;">📌 Pin to favorites</span>
+              </button>
+            {% endif %}
+          </div>
+
+          <label for="custom_path" style="font-size: 0.8rem; font-weight: 600;">Active / Custom File Path</label>
+          <input type="text" id="custom_path" name="custom_path" value="{{ custom_sample_path }}" placeholder="data/samples/stealc_stage1.bin" {{ '' if selected_sample_choice == 'custom' else 'disabled' }} style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+
+          <h6 style="margin-top: 0.5rem; margin-bottom: 0.35rem;">Human-in-the-Loop Gates</h6>
+          <label style="font-size: 0.85rem;">
+            <input type="checkbox" name="gate_peel" value="1" {{ 'checked' if gate_peel_checked else '' }}>
+            Require Approval: Peeling Gate
+          </label>
+          <label style="font-size: 0.85rem;">
+            <input type="checkbox" name="gate_trait" value="1" {{ 'checked' if gate_trait_checked else '' }}>
+            Require Approval: Genetic Attribution Gate
+          </label>
+          <label style="font-size: 0.85rem;">
+            <input type="checkbox" name="gate_verify" value="1" {{ 'checked' if gate_verify_checked else '' }}>
+            Require Approval: Radare2 Verification Gate
+          </label>
+
+          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.5rem; margin-top: 1rem;">
+            <button type="submit" id="start-triage-btn" class="primary" title="Launch automated PocketFlow triage pipeline"
+                    {% if pipeline_running %}aria-busy="true" disabled{% endif %}
+                    style="margin-bottom: 0; font-size: 0.9rem; padding: 0.45rem 0.75rem;">
+              {{ 'Triaging Pipeline...' if pipeline_running else 'Start Triage' }}
+            </button>
+            <button type="button" id="reset-run-btn" hx-post="/triage/reset" hx-target="#app-body" hx-swap="outerHTML" class="reset-btn" title="Clear active triage state and dialogue" {% if not state or pipeline_running %}disabled{% endif %} style="margin-bottom: 0; font-size: 0.9rem; padding: 0.45rem 0.75rem;">Reset Run</button>
+          </div>
+        </form>
+      </article>
+
+      <!-- THREAT DB CORPUS & CONFIGURABLE HARVESTER -->
+      <article>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h5 style="margin: 0;">Genetic Threat DB</h5>
+          <button type="button" hx-post="/triage/db/clear" hx-target="#app-body" hx-swap="outerHTML"
+                  hx-confirm="Are you sure you want to completely clear all indexed samples and traits from the database? This cannot be undone."
+                  class="outline secondary"
+                  title="Purge all samples and traits from SQLite database"
+                  style="font-size: 0.7rem; padding: 1px 6px; margin: 0; border-radius: 4px;">
+            Clear DB
+          </button>
+        </div>
+        <p style="font-size: 0.85rem; margin-bottom: 0.5rem;">
+          • Indexed Samples: <strong>{{ sample_count }}</strong><br>
+          • Total Genetic Traits: <strong>{{ trait_count }}</strong>
+        </p>
+
+        <!-- CONFIGURABLE HARVESTER ACCORDION -->
+        <details style="margin-bottom: 0.5rem; border: 1px solid var(--pico-muted-border-color); padding: 0.5rem 0.75rem; border-radius: var(--pico-border-radius);">
+          <summary style="font-size: 0.8rem; font-weight: 600; cursor: pointer;">Harvester Ingest Settings</summary>
+          <form hx-post="/triage/harvest" hx-target="#app-body" hx-swap="outerHTML" style="margin-top: 0.5rem; margin-bottom: 0;">
+            <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Target Family / Signature</label>
+            <input type="text" name="family" placeholder="e.g. Stealc, Lumma, RedLine" style="font-size: 0.78rem; margin-bottom: 0.4rem;">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; align-items: start;">
+              <div>
+                <label style="font-size: 0.72rem; font-weight: 600; margin-bottom: 2px; white-space: nowrap;">Tag Query</label>
+                <input type="text" name="tag" value="unpacked" placeholder="e.g. unpacked, exe" style="font-size: 0.78rem; margin-bottom: 0.4rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.72rem; font-weight: 600; margin-bottom: 2px; white-space: nowrap;">Sample Limit</label>
+                <input type="number" name="limit" min="1" max="25" value="5" placeholder="e.g. 5" style="font-size: 0.78rem; margin-bottom: 0.4rem;">
+              </div>
+            </div>
+
+            <label style="font-size: 0.72rem; font-weight: 600; margin-bottom: 2px;">Max Shannon Entropy Gate</label>
+            <input type="number" step="0.1" name="max_entropy" value="7.1" min="4.0" max="8.0" style="font-size: 0.78rem; margin-bottom: 0.4rem;">
+            <div class="concept-help">Samples exceeding this entropy are rejected to prevent crypted noise. Supports batch harvesting via comma-separated families/tags.</div>
+
+            <button type="submit" id="harvest-submit-btn" class="outline" title="Ephemeral download and index from MalwareBazaar"
+                    onclick="this.setAttribute('aria-busy', 'true'); this.innerText = 'Harvesting from MalwareBazaar...';"
+                    style="font-size: 0.8rem; padding: 0.35rem 0.5rem; width: 100%; margin-top: 0.5rem; margin-bottom: 0;">Run Ingestion</button>
+          </form>
+        </details>
+      </article>
+      
+    </aside>
+
+    <!-- RIGHT WORKSPACE: DUAL-PANE (ANALYST + CANVAS) -->
+    <main class="studio-pane">
+      <div class="studio-cols">
+
+        <!-- LEFT COLUMN: ANALYST DIALOGUE & AUDIT STREAM -->
+        <article style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); margin-bottom: 0;">
+          <h5 style="margin-top: 0; margin-bottom: 0.5rem;">Analyst Control & Stepper</h5>
+
+          <!-- STEPPER -->
+          {% set stages = ["ingest", "peel", "trait_match", "verify", "report"] %}
+          {% set gate_stages = {"gate_peel": "peel", "gate_trait": "trait_match", "gate_verify": "verify"} %}
+          {% set curr = gate_stages.get(state.paused_gate_name, state.current_stage) if (state and state.paused_gate_name) else (state.current_stage if state else "") %}
+          {% set is_pipeline_done = (state and state.status.value == 'completed' and not pipeline_running) %}
+          <div class="stepper">
+            {% for s in stages %}
+              {% set s_idx = loop.index0 %}
+              {% set curr_idx = stages.index(curr) if (state and curr in stages) else -1 %}
+              {% set is_done = (state and (is_pipeline_done or (curr_idx > -1 and s_idx < curr_idx))) %}
+              {% set is_curr = (state and not is_pipeline_done and curr_idx > -1 and s_idx == curr_idx) %}
+              <span class="stepper-step {{ 'completed' if is_done else ('active' if is_curr else '') }}" title="{{ 'Completed' if is_done else ('In Progress / Gate' if is_curr else 'Pending') }}">
+                {{ '✓' if is_done else ('▶' if is_curr else '•') }} {{ s|upper }}
+              </span>
+            {% endfor %}
+          </div>
+
+          <!-- ANALYST GATE ALERT (IF PAUSED) -->
+          {% if state and state.status.value == "paused_at_gate" %}
+            <article style="background: rgba(234, 88, 12, 0.15); border: 1px solid #ea580c; border-radius: var(--pico-border-radius); padding: 0.75rem; margin-bottom: 1rem;">
+              <strong style="color: #ea580c;">Paused at Analyst Gate: <code>{{ state.paused_gate_name }}</code></strong>
+              <form hx-post="/triage/approve" hx-target="#app-body" hx-swap="outerHTML" style="margin-top: 0.5rem; margin-bottom: 0;">
+                <label for="notes" style="font-size: 0.8rem;">Gate Approval Notes <small style="color: var(--pico-muted-color); font-weight: normal;">(optional analyst rationale recorded to audit trail)</small></label>
+                <input type="text" id="notes" name="notes" value="Verified clean sample. Proceed to trait analysis." style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <button type="submit" id="gate-approve-btn" class="primary"
+                          onclick="this.setAttribute('aria-busy', 'true'); this.innerText = 'Resuming Execution...'; document.getElementById('gate-abort-btn').setAttribute('disabled', 'true');"
+                          style="margin: 0; font-size: 0.85rem; padding: 0.35rem 0.5rem;">Approve & Resume</button>
+                  <button type="button" id="gate-abort-btn" hx-post="/triage/abort" hx-target="#app-body" hx-swap="outerHTML" class="secondary outline" style="margin: 0; font-size: 0.85rem; padding: 0.35rem 0.5rem;">Abort</button>
+                </div>
+              </form>
+            </article>
+          {% endif %}
+
+          <!-- CHAT & AUDIT LOG -->
+          <div id="chat-stream-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <h6 style="margin: 0;">Audit Log & Dialogue</h6>
+              <div style="display: flex; gap: 0.35rem; align-items: center;">
+                <button type="button" class="outline secondary" onclick="document.getElementById('dialogue-modal').showModal();" title="Expand dialogue to full reading view" style="font-size: 0.7rem; padding: 2px 7px; margin: 0; border-radius: 4px;">
+                  ⤢ Expand
+                </button>
+                <a href="/triage/dialog/download" role="button" class="outline secondary" download title="Download full analyst dialogue and system traces" style="font-size: 0.7rem; padding: 2px 7px; margin: 0; border-radius: 4px; text-decoration: none;">
+                  ⬇ Log
+                </a>
+              </div>
+            </div>
+            <div class="chat-box" id="chat-box-stream">
+              {% if state and state.execution_log %}
+                <div style="margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px dashed var(--pico-muted-border-color);">
+                  <small style="color: var(--pico-muted-color); font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Subsystem Execution Traces:</small>
+                  {% for log in state.execution_log %}
+                    <div style="font-family: monospace; font-size: 0.73rem; color: var(--pico-muted-color); margin-top: 2px; line-height: 1.35;">• {{ log }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <small style="color: var(--pico-muted-color); font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.05em; display: block; margin-bottom: 3px;">Analyst Dialogue History:</small>
+              {%- for msg in chat_messages %}
+                <div class="chat-msg {{ msg.role }}">
+                  <span style="font-weight: 700; font-size: 0.78rem; color: {{ 'var(--pico-primary)' if msg.role != 'user' else '#16a34a' }}; margin-right: 0.35rem; display: inline-block;">{{ 'Analyst:' if msg.role == 'user' else 'BrundleX Agent:' }}</span>
+                  <div class="chat-body" style="font-size: 0.82rem; line-height: 1.45; margin-top: 2px;">{{ msg.html|safe if msg.html is defined else msg.content }}</div>
+                </div>
+              {%- endfor %}
+            </div>
+
+            <!-- ANALYST COMMAND PROMPT -->
+            <form hx-post="/chat/send" hx-target="#chat-stream-container" hx-select="#chat-stream-container" hx-swap="outerHTML"
+                  onsubmit="wasNearBottom = true; const btn=document.getElementById('chat-send-btn'); const inp=document.getElementById('agent-msg-input'); if(btn){btn.setAttribute('aria-busy','true'); btn.innerText='Thinking...';}; if(inp){inp.setAttribute('readonly', 'true'); inp.style.opacity='0.6';};"
+                  style="margin: 0;">
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem;">
+                <input type="text" id="agent-msg-input" name="message" placeholder="Prompt agent (Press Enter or click Send)..." required style="margin: 0; font-size: 0.85rem;" autocomplete="off">
+                <button type="submit" id="chat-send-btn" class="outline" style="width: auto; margin: 0; padding: 0.35rem 0.85rem; font-size: 0.85rem; white-space: nowrap;">Send</button>
+              </div>
+              <div style="display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center;">
+                <small style="color: var(--pico-muted-color); font-size: 0.72rem; align-self: center; margin-right: 0.15rem;">Quick prompts:</small>
+                <button type="button" class="outline secondary" onclick="document.getElementById('agent-msg-input').value = 'Summarize key evasive traits and kinship confidence';" style="font-size: 0.68rem; padding: 2px 8px; margin: 0; border-radius: 4px;">Traits summary</button>
+                <button type="button" class="outline secondary" onclick="document.getElementById('agent-msg-input').value = 'Explain deobfuscation layers detected in this binary';" style="font-size: 0.68rem; padding: 2px 8px; margin: 0; border-radius: 4px;">Explain deobfuscation</button>
+                <button type="button" class="outline secondary" onclick="document.getElementById('agent-msg-input').value = 'Suggest resilient detection rule strategy for top candidate decryptors';" style="font-size: 0.68rem; padding: 2px 8px; margin: 0; border-radius: 4px;">Detection strategy</button>
+              </div>
+            </form>
+          </div>
+        </article>
+
+        <!-- RIGHT COLUMN: CANVAS TABS & MUTATION STUDIO -->
+        <article id="canvas-pane" style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); margin-bottom: 0;">
+          <h5 style="margin-top: 0; margin-bottom: 0.5rem;">Canvas & Trait Studio</h5>
+
+          <!-- TABS -->
+          <div class="tab-bar">
+            <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="display: inline; margin: 0;">
+              <input type="hidden" name="tab" value="lineage">
+              <button type="submit" class="tab-btn {{ 'primary' if active_tab == 'lineage' else 'outline secondary' }}">Genetic Lineage</button>
+            </form>
+            <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="display: inline; margin: 0;">
+              <input type="hidden" name="tab" value="disasm">
+              <button type="submit" class="tab-btn {{ 'primary' if active_tab == 'disasm' else 'outline secondary' }}">Disassembly & ESIL</button>
+            </form>
+            <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="display: inline; margin: 0;">
+              <input type="hidden" name="tab" value="studio">
+              <button type="submit" class="tab-btn {{ 'primary' if active_tab == 'studio' else 'outline secondary' }}">Mutation Studio</button>
+            </form>
+            <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="display: inline; margin: 0;">
+              <input type="hidden" name="tab" value="history">
+              <button type="submit" class="tab-btn {{ 'primary' if active_tab == 'history' else 'outline secondary' }}">History & Telemetry</button>
+            </form>
+            <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="display: inline; margin: 0;">
+              <input type="hidden" name="tab" value="report">
+              <button type="submit" class="tab-btn {{ 'primary' if active_tab == 'report' else 'outline secondary' }}">Triage Report</button>
+            </form>
+          </div>
+
+          <!-- TAB CONTENT 1: GENETIC LINEAGE -->
+          {% if active_tab == 'lineage' %}
+            {% if state and state.genetic_matches %}
+              <p style="font-size: 0.85rem; margin-bottom: 0.5rem;">
+                Extracted Traits Count: <strong>{{ state.traits_extracted_count }}</strong>
+              </p>
+              <table class="striped" style="font-size: 0.85rem;">
+                <thead>
+                  <tr>
+                    <th>Malware Family</th>
+                    <th>Indexed Specimen (SHA256)</th>
+                    <th>Jaccard Similarity</th>
+                    <th>Trait Overlap</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for match in state.genetic_matches %}
+                    <tr>
+                      <td><strong>{{ match.family }}</strong></td>
+                      <td><code style="font-size: 0.73rem;" title="{{ match.sample_sha256 }}">{{ match.sample_sha256[:20] if match.sample_sha256 else 'corpus_seed' }}...</code></td>
+                      <td>{{ "%.1f%%"|format((match.similarity_score if match.similarity_score is defined else match.similarity) * 100) }}</td>
+                      <td>{{ match.matched_traits_count if match.matched_traits_count is defined else match.shared_traits_count }} traits</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              <hr>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <h6 style="margin: 0;">Attribution & Capability Assessment</h6>
+                {% if state and state.final_report %}
+                  <form hx-post="/tab/select" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="margin: 0;">
+                    <input type="hidden" name="tab" value="report">
+                    <button type="submit" class="outline secondary" style="font-size: 0.72rem; padding: 2px 8px; margin: 0;">
+                      View Full Untruncated Report →
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.85rem; background: var(--pico-card-sectioning-background-color); padding: 0.75rem; border-radius: 4px;">
+                <strong>Attribution:</strong> {{ state.llm_verdict.get('attribution', 'Pending') }}<br>
+                <strong>Confidence:</strong> {{ "%.1f%%"|format(state.llm_verdict.get('confidence', 0.0) * 100) }}<br>
+                <strong>Capabilities:</strong> {{ state.llm_verdict.get('capabilities', [])|join(', ') }}<br>
+                <strong>Summary:</strong> {{ state.llm_verdict.get('summary', 'No summary available.') }}
+              </div>
+
+              {% if state.candidate_blocks %}
+                <hr>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                  <h6 style="margin: 0;">Top Candidate Decryptor Chromosomes (Binlex)</h6>
+                  <small style="color: var(--pico-muted-color);">Ranked by Cyclomatic Complexity & Entropy</small>
+                </div>
+                <table class="striped" style="font-size: 0.8rem;">
+                  <thead>
+                    <tr>
+                      <th>Offset</th>
+                      <th>Instructions</th>
+                      <th>Cyclomatic Complexity</th>
+                      <th>Entropy</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for cand in state.candidate_blocks %}
+                      <tr>
+                        <td><code>0x{{ '%x'|format(cand.offset) if cand.offset else '0' }}</code></td>
+                        <td>{{ cand.instructions }}</td>
+                        <td>{{ cand.cyclomatic_complexity }}</td>
+                        <td>{{ "%.2f"|format(cand.trait_entropy) }}</td>
+                        <td>
+                          <form hx-post="/mutation/load_candidate" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="margin: 0;">
+                            <input type="hidden" name="offset" value="{{ cand.offset }}">
+                            <button type="submit" class="outline secondary"
+                                    title="Send candidate instructions to Mutation Studio"
+                                    style="font-size: 0.72rem; padding: 1px 6px; margin: 0;">
+                              Send to Studio
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% endif %}
+            {% else %}
+              <p style="color: var(--pico-muted-color); font-size: 0.9rem; padding: 2rem 0; text-align: center;">
+                No genetic lineage data yet. Launch triage on a binary sample to view trait attributions.
+              </p>
+            {% endif %}
+
+          <!-- TAB CONTENT 2: DISASSEMBLY & ESIL -->
+          {% elif active_tab == 'disasm' %}
+            {% if state and state.radare_verification %}
+              {% set r2 = state.radare_verification %}
+              <p style="font-size: 0.85rem;">
+                • Disassembled Functions: <code>{{ r2.get('function_count', 0) }}</code><br>
+                • Entry Symbol: <code>{{ r2.get('verified_function', 'N/A') }}</code><br>
+                • Entry Address: <code>0x{{ '%08x'|format(r2.get('verified_address')) if r2.get('verified_address') is number else r2.get('verified_address', 'N/A') }}</code><br>
+                • CFG Basic Blocks: <code>{{ r2.get('cfg_nodes', 0) }}</code>
+              </p>
+              <hr>
+              <h6>ESIL Emulated Register State</h6>
+              {% if r2.get('register_values') %}
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.4rem; margin-bottom: 0.75rem;">
+                  {% for reg, val in r2.get('register_values').items() %}
+                    <div style="font-size: 0.75rem; background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; padding: 4px 8px; font-family: monospace;">
+                      <strong style="color: var(--pico-primary);">{{ reg|upper }}</strong>: {{ val }}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <pre style="font-size: 0.8rem;"><code>{{ r2.get('emulated_registers', [])|join(', ') if r2.get('emulated_registers') else 'No register traces available.' }}</code></pre>
+              {% endif %}
+            {% else %}
+              <p style="color: var(--pico-muted-color); font-size: 0.9rem; padding: 2rem 0; text-align: center;">
+                Radare2 verification data not yet available.
+              </p>
+            {% endif %}
+
+          <!-- TAB CONTENT 3: MUTATION STUDIO -->
+          {% elif active_tab == 'studio' %}
+            <h6 style="margin-top: 0; margin-bottom: 0.25rem;">Predictive Basic Block Simulation</h6>
+            <small style="display: block; color: var(--pico-muted-color); margin-bottom: 0.75rem;">Mutate detection chromosomes and prove runtime invariance with Radare2 ESIL.</small>
+
+            <form hx-post="/mutation/simulate" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                <label for="block_text" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0;">Input Basic Block (Assembly)</label>
+                <small style="color: var(--pico-muted-color); font-size: 0.75rem;">(Preloaded from target candidate or editable directly)</small>
+              </div>
+              <textarea id="block_text" name="block_text" rows="4" style="font-family: monospace; font-size: 0.85rem; margin-bottom: 0.35rem;">{{ studio_block_text }}</textarea>
+              <div class="concept-help">Enter continuous assembly instructions belonging to a single basic block (e.g. decryptor loop, XOR unmasking, or register setup). You can also click <em>"Send to Studio"</em> from any candidate block in the Genetic Lineage tab.</div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem; align-items: start;">
+                <!-- AGGRESSION COLUMN -->
+                <div style="display: flex; flex-direction: column;">
+                  <label for="aggression" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; line-height: 1.2;">Aggression Level (1-5)</label>
+                  <div style="height: 38px; display: flex; align-items: center; margin-bottom: 0.2rem;">
+                    <select id="aggression" name="aggression" style="font-size: 0.85rem; margin: 0; height: 38px; cursor: pointer;">
+                      {% for lvl in [1, 2, 3, 4, 5] %}
+                        <option value="{{ lvl }}" {{ 'selected' if (studio_aggression if studio_aggression is defined else 2) == lvl else '' }}>
+                          Level {{ lvl }} {% if lvl == 1 %}(Conservative swap){% elif lvl == 2 %}(Standard peephole){% elif lvl == 3 %}(Peephole + reorder){% elif lvl == 4 %}(Arithmetic expansion){% elif lvl == 5 %}(Deep invariant synthesis){% endif %}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="concept-help" style="margin-top: 0.35rem; margin-bottom: 0; min-height: 2.7rem;"><strong>1:</strong> Conservative single swap. <strong>2-3:</strong> Peephole + permutation. <strong>4-5:</strong> Aggressive multi-operator synthesis.</div>
+                </div>
+
+                <!-- VARIANT COUNT COLUMN -->
+                <div style="display: flex; flex-direction: column;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; line-height: 1.2;">
+                    <label for="num_variants" style="font-size: 0.85rem; font-weight: 600; margin: 0;">Variant Count (1-5)</label>
+                    <span id="variant-badge" style="font-size: 0.85rem; font-weight: 700; color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); padding: 1px 8px; border-radius: 4px; line-height: 1.2;">{{ studio_num_variants if studio_num_variants is defined else 2 }}</span>
+                  </div>
+                  <div style="height: 38px; display: flex; align-items: center; margin-bottom: 0.2rem;">
+                    <input type="range" id="num_variants" name="num_variants" min="1" max="5" step="1"
+                           value="{{ studio_num_variants if studio_num_variants is defined else 2 }}"
+                           oninput="document.getElementById('variant-badge').innerText = this.value;"
+                           style="width: 100%; margin: 0; cursor: pointer;">
+                  </div>
+                  <div class="concept-help" style="margin-top: 0.35rem; margin-bottom: 0; min-height: 2.7rem;">Target number of distinct synthetic instruction variants to simulate and verify in ESIL.</div>
+                </div>
+              </div>
+
+              <!-- CONFIGURABLE YARA METADATA ACCORDION -->
+              <details style="margin-top: 0.75rem; margin-bottom: 0.75rem; border: 1px solid var(--pico-muted-border-color); padding: 0.65rem 0.85rem; border-radius: var(--pico-border-radius);">
+                <summary style="font-size: 0.85rem; font-weight: 600; cursor: pointer;">Configure YARA Rule Metadata</summary>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.85rem; margin-top: 0.75rem;">
+                  <!-- ROW 1 -->
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Rule Identifier</label>
+                    <input type="text" name="rule_name" value="{{ ('brundlex_' ~ state.llm_verdict.get('attribution', 'stealc')|lower ~ '_decryptor') if state and state.llm_verdict else 'brundlex_simulated_block' }}" style="font-size: 0.8rem; margin-bottom: 0.5rem;">
+                  </div>
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Threat Family</label>
+                    <input type="text" name="threat_family" value="{{ state.llm_verdict.get('attribution', 'Generic') if state and state.llm_verdict else 'Generic' }}" style="font-size: 0.8rem; margin-bottom: 0.5rem;">
+                  </div>
+
+                  <!-- ROW 2 -->
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Author / Source</label>
+                    <input type="text" name="author" value="BrundleX Agent & Threat Analyst" style="font-size: 0.8rem; margin-bottom: 0.5rem;">
+                  </div>
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Reference / Sample SHA</label>
+                    <input type="text" name="reference" value="{{ ('SHA256:' ~ state.sample_sha256[:16] ~ '...') if state and state.sample_sha256 else 'BrundleX Predictive Mutation Engine' }}" style="font-size: 0.8rem; margin-bottom: 0.5rem;">
+                  </div>
+
+                  <!-- ROW 3 -->
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">TLP Marking (Classification)</label>
+                    <select name="tlp" style="font-size: 0.8rem; margin-bottom: 0;">
+                      <option value="CLEAR" selected>TLP:CLEAR (Public / Unrestricted)</option>
+                      <option value="GREEN">TLP:GREEN (Community Sharing)</option>
+                      <option value="AMBER">TLP:AMBER (Limited Internal Sharing)</option>
+                      <option value="RED">TLP:RED (Strictly Confidential)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; margin-bottom: 2px;">Threat Severity (Ascending)</label>
+                    <select name="severity" style="font-size: 0.8rem; margin-bottom: 0;">
+                      <option value="LOW">LOW</option>
+                      <option value="MEDIUM">MEDIUM</option>
+                      <option value="HIGH" selected>HIGH</option>
+                      <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
+
+              <button type="submit" class="primary" style="font-size: 0.9rem; padding: 0.5rem 1rem; width: 100%; margin-bottom: 0.75rem;">Generate & Verify Invariant Mutations</button>
+            </form>
+
+            <!-- MUTATION RESULTS -->
+            {% if mutation_results %}
+              <hr>
+              <h6>Equivalence Verification Reports</h6>
+              <div style="overflow-x: auto; max-width: 100%; margin-bottom: 0.5rem;">
+              <table class="striped" style="font-size: 0.8rem; margin-bottom: 0;">
+                <thead>
+                  <tr>
+                    <th>Variant</th>
+                    <th>Assembly</th>
+                    <th>ESIL Equivalence</th>
+                    <th>Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for rep in mutation_results.reports %}
+                    <tr>
+                      <td style="vertical-align: top; min-width: 140px;">
+                        <strong>{{ rep.variant_id }}</strong>
+                        {% if rep.tactic_tag %}
+                          <div style="margin-top: 0.25rem;">
+                            <span class="badge" title="{{ rep.tactical_explanation }}" style="font-size: 0.7rem; cursor: help; border-bottom: 1px dotted var(--pico-muted-color);">
+                              🛡️ {{ rep.tactic_tag }}
+                            </span>
+                            <div style="font-size: 0.7rem; color: var(--pico-muted-color); margin-top: 2px;">
+                              {{ rep.tactical_summary }}
+                            </div>
+                          </div>
+                        {% endif %}
+                      </td>
+                      <td style="vertical-align: top;"><code>{{ rep.assembly }}</code></td>
+                      <td style="vertical-align: top;"><span style="color: {{ '#16a34a' if rep.equivalent else '#dc2626' }};">● {{ 'VERIFIED' if rep.equivalent else 'FAILED' }}</span></td>
+                      <td style="vertical-align: top;">{{ "%.1f%%"|format(rep.confidence * 100) }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              </div>
+
+              {% if mutation_results.metrics %}
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.75rem; margin-bottom: 0.5rem; padding: 0.4rem 0.75rem; background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 6px; font-size: 0.8rem;">
+                  <div>
+                    <strong>Signature Resilience:</strong>
+                    <span class="badge" style="margin-left: 0.35rem; font-size: 0.75rem;">{{ mutation_results.metrics.resilience_score }}</span>
+                  </div>
+                  <div data-tooltip="{{ mutation_results.metrics.explanation }}" data-placement="left" style="cursor: help;">
+                    <small class="text-muted">ℹ️ <strong>Verdict:</strong> {{ mutation_results.metrics.verdict }}</small>
+                  </div>
+                </div>
+              {% endif %}
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; margin-bottom: 0.5rem;">
+                <h6 style="margin: 0;">Synthesized Resilient YARA Rule</h6>
+                <a href="/mutation/download" role="button" class="outline" download="{{ mutation_results.rule_name }}.yar" style="font-size: 0.8rem; padding: 0.3rem 0.75rem;">
+                  Download {{ mutation_results.rule_name }}.yar
+                </a>
+              </div>
+              <pre class="yara-code"><code style="font-size: 0.75rem;">{{ mutation_results.yara }}</code></pre>
+            {% endif %}
+
+          <!-- TAB CONTENT 4: HISTORY -->
+          {% elif active_tab == 'history' %}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h6 style="margin: 0;">Past Triage Executions</h6>
+              {% if analysis_history or mutation_history %}
+                <button type="button" hx-post="/history/clear" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML"
+                        class="outline secondary"
+                        title="Clear session triage and mutation execution history"
+                        style="font-size: 0.72rem; padding: 2px 8px; margin: 0; border-radius: 4px;">
+                  Clear History
+                </button>
+              {% endif %}
+            </div>
+            {% if analysis_history %}
+              <table class="striped" style="font-size: 0.8rem; margin-bottom: 1.5rem;">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Target Binary</th>
+                    <th>Family</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for h in analysis_history %}
+                    <tr>
+                      <td>{{ h.timestamp }}</td>
+                      <td><code>{{ h.sample }}</code></td>
+                      <td><strong>{{ h.family }}</strong></td>
+                      <td>{{ h.status }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p style="color: var(--pico-muted-color); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                No prior triage runs in this session yet.
+              </p>
+            {% endif %}
+
+            <hr>
+            <h6>Mutation Studio History & Synthesized Rules</h6>
+            {% if mutation_history %}
+              {% for mh in mutation_history|reverse %}
+                <details style="margin-bottom: 0.5rem; border: 1px solid var(--pico-muted-border-color); padding: 0.5rem; border-radius: var(--pico-border-radius);">
+                  <summary style="font-size: 0.85rem; font-weight: 600;">
+                    Simulation #{{ loop.revindex }}: <code>{{ mh.rule_name }}</code> ({{ mh.timestamp }})
+                  </summary>
+                  <div style="font-size: 0.8rem; margin-top: 0.5rem;">
+                    • <strong>Input Block:</strong> <code>{{ mh.input_asm }}</code><br>
+                    • <strong>Aggression:</strong> {{ mh.aggression }} | <strong>Variants:</strong> {{ mh.variant_count }}
+                    <pre style="margin-top: 0.5rem;"><code style="font-size: 0.75rem;">{{ mh.yara_rule }}</code></pre>
+                  </div>
+                </details>
+              {% endfor %}
+            {% else %}
+              <p style="color: var(--pico-muted-color); font-size: 0.9rem;">
+                No mutation simulations generated yet.
+              </p>
+            {% endif %}
+
+          <!-- TAB CONTENT 5: TRIAGE REPORT -->
+          {% elif active_tab == 'report' %}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h6 style="margin: 0;">Full Autonomous Triage Report</h6>
+              {% if state and state.final_report %}
+                <div style="display: flex; gap: 0.5rem;">
+                  <button type="button" class="outline secondary" onclick="copyText(document.getElementById('report-text-area').innerText, this);" style="font-size: 0.75rem; padding: 2px 10px; margin: 0; border-radius: 4px;">
+                    📋 Copy Report
+                  </button>
+                  <a href="/triage/report/download" role="button" class="outline" download style="font-size: 0.75rem; padding: 2px 10px; margin: 0; border-radius: 4px; text-decoration: none;">
+                    ⬇ Download (.md)
+                  </a>
+                </div>
+              {% endif %}
+            </div>
+
+            {% if state and state.final_report %}
+              <!-- EXECUTIVE SUMMARY CARDS -->
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
+                <div style="background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; padding: 0.5rem 0.75rem;">
+                  <small style="display: block; color: var(--pico-muted-color); font-size: 0.7rem; text-transform: uppercase;">Verdict</small>
+                  <strong style="font-size: 0.95rem; color: {{ '#dc2626' if state.llm_verdict.get('verdict') == 'MALICIOUS' else '#eab308' if state.llm_verdict.get('verdict') == 'SUSPICIOUS' else '#16a34a' }};">
+                    {{ state.llm_verdict.get('verdict', 'COMPLETED') }}
+                  </strong>
+                </div>
+                <div style="background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; padding: 0.5rem 0.75rem;">
+                  <small style="display: block; color: var(--pico-muted-color); font-size: 0.7rem; text-transform: uppercase;">Attributed Family</small>
+                  <strong style="font-size: 0.95rem;">{{ state.llm_verdict.get('attribution', 'Unknown') }}</strong>
+                </div>
+                <div style="background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; padding: 0.5rem 0.75rem;">
+                  <small style="display: block; color: var(--pico-muted-color); font-size: 0.7rem; text-transform: uppercase;">Kinship Confidence</small>
+                  <strong style="font-size: 0.95rem;">{{ "%.1f%%"|format(state.llm_verdict.get('confidence', 0.0) * 100) }}</strong>
+                </div>
+                <div style="background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px; padding: 0.5rem 0.75rem;">
+                  <small style="display: block; color: var(--pico-muted-color); font-size: 0.7rem; text-transform: uppercase;">Traits Indexed</small>
+                  <strong style="font-size: 0.95rem;">{{ state.traits_extracted_count }}</strong>
+                </div>
+              </div>
+
+              {% if state and state.proactive_yara %}
+                <div style="border: 1px solid var(--pico-muted-border-color); border-radius: 6px; padding: 1rem 1.15rem; margin-bottom: 1.25rem; background: var(--pico-card-background-color);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                      <h6 style="margin: 0; font-size: 0.95rem;">🛡️ Proactive Defense: Predictive Mutation Rule</h6>
+                      {% if state.proactive_yara_metrics %}
+                        <span class="badge" style="font-size: 0.72rem; padding: 2px 8px;">{{ state.proactive_yara_metrics.get('resilience_score', 'Resilient') }}</span>
+                      {% endif %}
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                      <a href="/mutation/download" role="button" class="outline" download style="font-size: 0.75rem; padding: 3px 10px; margin: 0; border-radius: 4px; text-decoration: none;">
+                        ⬇ Download Rule (.yar)
+                      </a>
+                      {% if state.candidate_blocks %}
+                        <form hx-post="/mutation/load_candidate" hx-target="#canvas-pane" hx-select="#canvas-pane" hx-swap="outerHTML" style="margin: 0; display: inline;">
+                          <input type="hidden" name="offset" value="{{ state.candidate_blocks[0].offset if state.candidate_blocks[0].offset is defined else 0 }}">
+                          <button type="submit" class="outline contrast" style="font-size: 0.75rem; padding: 3px 10px; margin: 0; border-radius: 4px;">
+                            Tune in Studio →
+                          </button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <p style="font-size: 0.82rem; margin-bottom: 0.65rem; color: var(--pico-muted-color); line-height: 1.45;">
+                    BrundleX automatically simulated semantic mutations on the identified core decryptor routine, mathematically verified register invariance in Radare2 ESIL, and synthesized a resilient YARA rule before adversaries deploy updated variants.
+                  </p>
+                  <pre class="yara-code" style="max-height: 150px; margin-bottom: 0; overflow-y: auto;"><code style="font-size: 0.73rem;">{{ state.proactive_yara }}</code></pre>
+                </div>
+              {% endif %}
+
+              <!-- COMPLETE UNTRUNCATED MARKDOWN CONTAINER -->
+              <pre id="report-text-area" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 6px; padding: 1rem; line-height: 1.5; max-height: 480px; overflow-y: auto;">{{ state.final_report }}</pre>
+            {% else %}
+              <div style="text-align: center; padding: 3rem 1rem; color: var(--pico-muted-color);">
+                <p style="margin-bottom: 0.5rem;">No triage report generated yet for this sample.</p>
+                <small>Launch automated triage pipeline and complete approval checkpoints to produce an untruncated synthesis report.</small>
+              </div>
+            {% endif %}
+
+          {% endif %}
+
+        </article>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- EXPANDED DIALOGUE MODAL -->
+  <dialog id="dialogue-modal" style="max-width: 860px; width: 92vw; margin: auto;">
+    <article style="padding: 1.25rem; max-height: 85vh; display: flex; flex-direction: column; margin-bottom: 0;">
+      <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--pico-muted-border-color);">
+        <h5 style="margin: 0; font-size: 1.1rem;">Full Analyst Dialogue & Investigation Stream</h5>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <a href="/triage/dialog/download" role="button" class="outline secondary" download style="font-size: 0.75rem; padding: 2px 10px; margin: 0; text-decoration: none;">⬇ Download Log</a>
+          <button type="button" class="outline" onclick="document.getElementById('dialogue-modal').close();" style="font-size: 0.75rem; padding: 2px 10px; margin: 0;">Close ✕</button>
+        </div>
+      </header>
+      <div style="overflow-y: auto; flex: 1; padding-right: 0.5rem;">
+        {% if state and state.execution_log %}
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 4px;">
+            <strong style="font-size: 0.75rem; text-transform: uppercase; color: var(--pico-muted-color); display: block; margin-bottom: 4px;">Subsystem Execution Traces:</strong>
+            {% for log in state.execution_log %}
+              <div style="font-family: monospace; font-size: 0.75rem; color: var(--pico-muted-color); line-height: 1.4;">• {{ log }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% for msg in chat_messages %}
+          <div class="chat-msg {{ msg.role }}" style="margin-bottom: 0.85rem; padding: 0.65rem 0.85rem;">
+            <div style="font-weight: 700; font-size: 0.82rem; color: {{ 'var(--pico-primary)' if msg.role != 'user' else '#16a34a' }}; margin-bottom: 4px;">
+              {{ 'Analyst:' if msg.role == 'user' else 'BrundleX Agent:' }}
+            </div>
+            <div style="font-size: 0.88rem; line-height: 1.55;">{{ msg.html|safe if msg.html is defined else msg.content }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </article>
+  </dialog>
+
+</body>
+</html>
