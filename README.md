@@ -191,8 +191,8 @@ Adversaries recompile and modify decryptor loops to break static signatures. Bru
   - Decrement value: `sub rdx, 1` <-> `dec rdx`.
   - Test value: `test rbx, rbx` <-> `or rbx, rbx`.
 - **Register Substitution**: Swaps non-volatile general-purpose registers. Protects stack pointers (`rsp`, `rbp`, `rip`).
-- **Instruction Permutation**: Reorders independent instructions. Uses hazard analysis to prevent Read-After-Write (RAW), Write-After-Read (WAR), and Write-After-Write (WAW) hazards.
-- **ESIL Invariance Verification**: Executes original and mutant blocks in the Radare2 ESIL virtual machine. Verifies that all output registers match.
+- **Instruction Permutation**: Reorders independent instructions. Uses hazard analysis to prevent Read-After-Write (RAW), Write-After-Read (WAR), and Write-After-Write (WAW) hazards, enforcing strict serialization barriers around stack pointer updates.
+- **ESIL Invariance Verification**: Executes original and mutant blocks in the Radare2 ESIL virtual machine. Proves semantic equivalence across both CPU registers and volatile stack memory.
 - **Resilient YARA Synthesis**: Aligns verified mutant blocks. Replaces changing register opcodes with `??` wildcards and anchors invariant opcodes.
 
 ### Mutation Controls

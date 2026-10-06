@@ -2,9 +2,10 @@
 Mutation Operators for Predictive Trait Simulation Engine.
 Implements:
 - Register substitution (preserving stack and base pointers)
-- Peephole optimization semantic swaps (add/inc, xor/mov 0, test/or)
+- Peephole optimization semantic swaps (add/inc, xor/mov 0, test/or, etc.)
 - Hazard dependency analysis (preventing RAW, WAR, WAW reordering)
-- Instruction permutation and multi-variant mutation generation
+- Stack pointer serialization barrier (rsp/esp modifications cannot reorder across stack accesses)
+- Rigorous instruction permutation and multi-variant mutation generation
 """
 
 import logging
@@ -49,6 +50,30 @@ ALL_KNOWN_REGISTERS = (
     | PROTECTED_REGISTERS
     | {"ah", "bh", "ch", "dh"}
 )
+
+REG_TO_64 = {
+    # 64-bit
+    "rax": "rax", "rbx": "rbx", "rcx": "rcx", "rdx": "rdx",
+    "rsi": "rsi", "rdi": "rdi", "rbp": "rbp", "rsp": "rsp",
+    "r8": "r8", "r9": "r9", "r10": "r10", "r11": "r11",
+    "r12": "r12", "r13": "r13", "r14": "r14", "r15": "r15",
+    # 32-bit
+    "eax": "rax", "ebx": "rbx", "ecx": "rcx", "edx": "rdx",
+    "esi": "rsi", "edi": "rdi", "ebp": "rbp", "esp": "rsp",
+    "r8d": "r8", "r9d": "r9", "r10d": "r10", "r11d": "r11",
+    "r12d": "r12", "r13d": "r13", "r14d": "r14", "r15d": "r15",
+    # 16-bit
+    "ax": "rax", "bx": "rbx", "cx": "rcx", "dx": "rdx",
+    "si": "rsi", "di": "rdi", "bp": "rbp", "sp": "rsp",
+    "r8w": "r8", "r9w": "r9", "r10w": "r10", "r11w": "r11",
+    "r12w": "r12", "r13w": "r13", "r14w": "r14", "r15w": "r15",
+    # 8-bit
+    "al": "rax", "bl": "rbx", "cl": "rcx", "dl": "rdx",
+    "sil": "rsi", "dil": "rdi", "bpl": "rbp", "spl": "rsp",
+    "r8b": "r8", "r9b": "r9", "r10b": "r10", "r11b": "r11",
+    "r12b": "r12", "r13b": "r13", "r14b": "r14", "r15b": "r15",
+    "ah": "rax", "bh": "rbx", "ch": "rcx", "dh": "rdx",
+}
 
 
 def get_register_pool(reg: str) -> list[str]:
@@ -138,7 +163,7 @@ def extract_rw_registers(inst: Instruction) -> tuple[set[str], set[str]]:
         else:
             writes.update(dst_regs)
 
-    elif mnemonic in ["add", "sub", "xor", "or", "and", "shl", "shr", "sar", "imul"]:
+    elif mnemonic in ["add", "sub", "xor", "or", "and", "shl", "shr", "sar", "ror", "rol", "imul"]:
         if len(operands) > 1:
             src = operands[1]
             reads.update(_extract_registers_from_string(src))
@@ -177,6 +202,26 @@ def extract_rw_registers(inst: Instruction) -> tuple[set[str], set[str]]:
             reads.update(_extract_registers_from_string(op))
 
     return reads, writes
+
+
+def detect_register_mapping(orig_block: list[Instruction], variant: list[Instruction]) -> dict[str, str]:
+    """Infers register substitutions between original and variant instruction blocks."""
+    mapping: dict[str, str] = {}
+    if len(orig_block) != len(variant):
+        return mapping
+    for o_inst, v_inst in zip(orig_block, variant):
+        if o_inst.mnemonic.lower() == v_inst.mnemonic.lower():
+            for o_op, v_op in zip(o_inst.operands, v_inst.operands):
+                o_regs = _extract_registers_from_string(o_op)
+                v_regs = _extract_registers_from_string(v_op)
+                if len(o_regs) == 1 and len(v_regs) == 1:
+                    r1 = next(iter(o_regs))
+                    r2 = next(iter(v_regs))
+                    if r1 != r2 and r1 not in PROTECTED_REGISTERS and r2 not in PROTECTED_REGISTERS:
+                        root1 = REG_TO_64.get(r1, r1)
+                        root2 = REG_TO_64.get(r2, r2)
+                        mapping[root1] = root2
+    return mapping
 
 
 def substitute_registers(inst: Instruction, mapping: dict[str, str]) -> Instruction:
@@ -281,6 +326,14 @@ def get_peephole_alternatives(inst: Instruction) -> list[Instruction]:
             if sub_inst not in alts:
                 alts.append(sub_inst)
 
+    # sub reg, reg -> also xor reg, reg
+    elif mnemonic == "sub" and len(operands) == 2 and operands[0].lower() == operands[1].lower():
+        reg = operands[0]
+        if reg.lower() not in PROTECTED_REGISTERS and "[" not in reg:
+            xor_inst = Instruction(mnemonic="xor", operands=[reg, reg])
+            if xor_inst not in alts:
+                alts.append(xor_inst)
+
     # add reg, 1 -> also sub reg, -1
     elif mnemonic == "add" and len(operands) == 2 and operands[1] in ["1", "0x1"] or mnemonic == "inc" and len(operands) == 1:
         reg = operands[0]
@@ -305,13 +358,21 @@ def get_peephole_alternatives(inst: Instruction) -> list[Instruction]:
             if and_inst not in alts:
                 alts.append(and_inst)
 
+    # or reg, reg -> also test reg, reg
+    elif mnemonic == "or" and len(operands) == 2 and operands[0].lower() == operands[1].lower():
+        reg = operands[0]
+        if reg.lower() not in PROTECTED_REGISTERS:
+            test_inst = Instruction(mnemonic="test", operands=[reg, reg])
+            if test_inst not in alts:
+                alts.append(test_inst)
+
     return alts
 
 
 def can_reorder(inst1: Instruction, inst2: Instruction) -> bool:
     """
     Determines if two adjacent instructions can be reordered without violating
-    data dependencies (RAW, WAR, WAW) or memory consistency.
+    data dependencies (RAW, WAR, WAW), stack frame layout, or memory consistency.
     """
     reads1, writes1 = extract_rw_registers(inst1)
     reads2, writes2 = extract_rw_registers(inst2)
@@ -328,15 +389,70 @@ def can_reorder(inst1: Instruction, inst2: Instruction) -> bool:
     if writes1 & writes2:
         return False
 
+    # Stack Pointer Serialization Barrier:
+    # Any instruction modifying the stack pointer (sub rsp, add rsp, push, pop, leave)
+    # cannot reorder across ANY instruction that accesses memory or references the stack pointer.
+    stack_regs = {"rsp", "esp", "sp"}
+    is_stack_mod1 = bool(writes1 & stack_regs) or inst1.mnemonic in {"push", "pop", "leave", "enter"}
+    is_stack_mod2 = bool(writes2 & stack_regs) or inst2.mnemonic in {"push", "pop", "leave", "enter"}
+
+    if is_stack_mod1 and (bool((reads2 | writes2) & stack_regs) or any("[" in op for op in inst2.operands)):
+        return False
+
+    if is_stack_mod2 and (bool((reads1 | writes1) & stack_regs) or any("[" in op for op in inst1.operands)):
+        return False
+
     # Prevent reordering across memory operations conservatively
     has_mem1 = any("[" in op for op in inst1.operands)
     has_mem2 = any("[" in op for op in inst2.operands)
     if has_mem1 and has_mem2:
         return False
 
-    # Prevent reordering jumps or calls
-    control_flow = {"jmp", "je", "jne", "jz", "jnz", "call", "ret"}
+    # Prevent reordering control flow or flag-sensitive branch/conditions
+    control_flow = {
+        "jmp", "je", "jne", "jz", "jnz", "ja", "jae", "jb", "jbe", "jg", "jge", "jl", "jle",
+        "call", "ret", "syscall", "sysenter", "int",
+        "sete", "setne", "setz", "setnz", "seta", "setb", "setg", "setl",
+        "cmove", "cmovne", "cmovz", "cmovnz", "cmova", "cmovb", "cmovg", "cmovl",
+    }
     return inst1.mnemonic not in control_flow and inst2.mnemonic not in control_flow
+
+
+def generate_safe_permutations(block: list[Instruction], max_perms: int = 12) -> list[list[Instruction]]:
+    """
+    Generates instruction reorderings strictly satisfying data hazard constraints
+    and stack serialization barriers via verified pairwise topological swaps.
+    """
+    if len(block) <= 1:
+        return []
+
+    safe_perms: list[list[Instruction]] = []
+
+    # 1. Single adjacent safe swaps
+    for i in range(len(block) - 1):
+        if can_reorder(block[i], block[i + 1]):
+            perm = list(block)
+            perm[i], perm[i + 1] = perm[i + 1], perm[i]
+            if perm != block and perm not in safe_perms:
+                safe_perms.append(perm)
+                if len(safe_perms) >= max_perms:
+                    return safe_perms
+
+    # 2. Multi-step safe bubble permutations
+    queue = list(safe_perms)
+    while queue and len(safe_perms) < max_perms:
+        current = queue.pop(0)
+        for i in range(len(current) - 1):
+            if can_reorder(current[i], current[i + 1]):
+                next_perm = list(current)
+                next_perm[i], next_perm[i + 1] = next_perm[i + 1], next_perm[i]
+                if next_perm != block and next_perm not in safe_perms:
+                    safe_perms.append(next_perm)
+                    queue.append(next_perm)
+                    if len(safe_perms) >= max_perms:
+                        return safe_perms
+
+    return safe_perms
 
 
 def generate_mutations(
@@ -347,14 +463,14 @@ def generate_mutations(
     """
     Generates semantically equivalent mutant variants of an instruction basic block.
     Supports 32-bit and 64-bit general-purpose registers, multi-instruction peepholes,
-    multi-pair permutations, and compound multi-operator mutations.
+    strictly hazard-verified permutations, and compound multi-operator mutations.
 
     Aggression levels:
       1: Conservative (single peepholes, verified adjacent permutations)
       2: Moderate (register substitutions across matching register pools)
       3: Aggressive (compound mutations: register substitution + peephole transformations)
-      4: Highly Aggressive (compound mutations: register swap + peephole + instruction permutations)
-      5: Maximum (full combinatorial exploration, speculative permutations, and register re-allocations)
+      4: Highly Aggressive (compound mutations: register swap + peephole + safe instruction permutations)
+      5: Maximum (full combinatorial exploration of compound register mappings, peepholes, and permutations)
     """
     # Extract register pools for all registers used in the block
     used_by_pool: dict[int, tuple[list[str], list[str]]] = {}
@@ -372,15 +488,19 @@ def generate_mutations(
     reg_mappings: list[dict[str, str]] = []
     for (used_regs, pool) in used_by_pool.values():
         avail_regs = [r for r in pool if r not in used_regs and r not in PROTECTED_REGISTERS]
+        # Single register substitutions
         for u in used_regs:
             for a in avail_regs:
                 reg_mappings.append({u: a})
+        # Pairwise register substitutions
         if len(used_regs) >= 2 and len(avail_regs) >= 2:
-            reg_mappings.append({used_regs[0]: avail_regs[0], used_regs[1]: avail_regs[1]})
-            if len(avail_regs) >= 4:
-                reg_mappings.append({used_regs[0]: avail_regs[2], used_regs[1]: avail_regs[3]})
+            limit_avail = min(len(avail_regs), 6)
+            for i in range(limit_avail):
+                for j in range(limit_avail):
+                    if i != j:
+                        reg_mappings.append({used_regs[0]: avail_regs[i], used_regs[1]: avail_regs[j]})
 
-    # TIER A: Conservative (single peepholes and adjacent permutations)
+    # TIER A: Conservative (single peepholes and safe permutations)
     tier_conservative: list[list[Instruction]] = []
     for idx, inst in enumerate(block):
         for alt in get_peephole_alternatives(inst):
@@ -388,12 +508,9 @@ def generate_mutations(
             v[idx] = alt
             if v != block and v not in tier_conservative:
                 tier_conservative.append(v)
-    for i in range(len(block) - 1):
-        if can_reorder(block[i], block[i + 1]):
-            perm = list(block)
-            perm[i], perm[i + 1] = perm[i + 1], perm[i]
-            if perm != block and perm not in tier_conservative:
-                tier_conservative.append(perm)
+    for perm in generate_safe_permutations(block):
+        if perm not in tier_conservative:
+            tier_conservative.append(perm)
 
     # TIER B: Register Substitutions
     tier_register: list[list[Instruction]] = []
@@ -412,7 +529,7 @@ def generate_mutations(
         if v_all != block and v_all not in tier_conservative and v_all not in tier_compound:
             tier_compound.append(v_all)
 
-    for base in (tier_register[:6] or [block]):
+    for base in (tier_register[:10] or [block]):
         for idx, inst in enumerate(base):
             for alt in get_peephole_alternatives(inst):
                 v = list(base)
@@ -420,62 +537,31 @@ def generate_mutations(
                 if v != block and v not in tier_conservative and v not in tier_register and v not in tier_compound:
                     tier_compound.append(v)
 
-    # TIER D: Triple Compound (Register + Peephole + Permutations)
+    # TIER D: Triple Compound (Register + Peephole + Safe Permutations)
     tier_full: list[list[Instruction]] = []
-    bases = tier_compound[:6] or tier_register[:6] or [block]
+    bases = tier_compound[:10] or tier_register[:10] or [block]
     for base in bases:
-        for i in range(len(base) - 1):
-            if can_reorder(base[i], base[i + 1]):
-                perm = list(base)
-                perm[i], perm[i + 1] = perm[i + 1], perm[i]
-                if (
-                    perm != block
-                    and perm not in tier_conservative
-                    and perm not in tier_register
-                    and perm not in tier_compound
-                    and perm not in tier_full
-                ):
-                    tier_full.append(perm)
-
-    # TIER E: Speculative and Deep Permutations
-    tier_speculative: list[list[Instruction]] = []
-    for i in range(len(block) - 1):
-        perm = list(block)
-        perm[i], perm[i + 1] = perm[i + 1], perm[i]
-        if (
-            perm != block
-            and perm not in tier_conservative
-            and perm not in tier_register
-            and perm not in tier_compound
-            and perm not in tier_full
-            and perm not in tier_speculative
-        ):
-            tier_speculative.append(perm)
-
-    if len(block) >= 3:
-        perm = list(block)
-        perm[0], perm[2] = perm[2], perm[0]
-        if (
-            perm != block
-            and perm not in tier_conservative
-            and perm not in tier_register
-            and perm not in tier_compound
-            and perm not in tier_full
-            and perm not in tier_speculative
-        ):
-            tier_speculative.append(perm)
+        for perm in generate_safe_permutations(base):
+            if (
+                perm != block
+                and perm not in tier_conservative
+                and perm not in tier_register
+                and perm not in tier_compound
+                and perm not in tier_full
+            ):
+                tier_full.append(perm)
 
     # Order tiers based on requested aggression level
     if aggression <= 1:
-        tier_order = [tier_conservative, tier_register, tier_compound, tier_full, tier_speculative]
+        tier_order = [tier_conservative, tier_register, tier_compound, tier_full]
     elif aggression == 2:
-        tier_order = [tier_register, tier_conservative, tier_compound, tier_full, tier_speculative]
+        tier_order = [tier_register, tier_conservative, tier_compound, tier_full]
     elif aggression == 3:
-        tier_order = [tier_compound, tier_register, tier_conservative, tier_full, tier_speculative]
+        tier_order = [tier_compound, tier_register, tier_conservative, tier_full]
     elif aggression == 4:
-        tier_order = [tier_full, tier_compound, tier_register, tier_speculative, tier_conservative]
+        tier_order = [tier_full, tier_compound, tier_register, tier_conservative]
     else:  # 5
-        tier_order = [tier_speculative, tier_full, tier_compound, tier_register, tier_conservative]
+        tier_order = [tier_full, tier_compound, tier_register, tier_conservative]
 
     variants: list[list[Instruction]] = []
     for tier in tier_order:

@@ -393,7 +393,11 @@ def _synthesize_proactive_mutation(shared: Any, top_family: str) -> tuple[str | 
         disasm_lines = ["xor ecx, ecx", "mov rdx, 0x20", "add rax, 1"]
 
     try:
-        from src.mutation.operators import Instruction, generate_mutations
+        from src.mutation.operators import (
+            Instruction,
+            detect_register_mapping,
+            generate_mutations,
+        )
         from src.mutation.verifier import ESILVerifier
         from src.mutation.yara_generator import (
             calculate_rule_metrics,
@@ -419,7 +423,8 @@ def _synthesize_proactive_mutation(shared: Any, top_family: str) -> tuple[str | 
         for var in mutant_variants:
             vb = _block_to_bytes(var)
             if orig_bytes and vb:
-                is_inv, _, _ = verifier.verify_equivalence(orig_bytes, vb, arch="x86", bits=64)
+                reg_map = detect_register_mapping(orig_instructions, var)
+                is_inv, _, _ = verifier.verify_equivalence(orig_bytes, vb, arch="x86", bits=64, reg_map=reg_map)
                 if is_inv:
                     verified_bytes.append(vb)
             elif vb:

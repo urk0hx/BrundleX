@@ -111,3 +111,30 @@ def test_fm_blx_r06_rank_mutation_candidates():
     assert len(ranked) == 2
     # Candidate B should outrank Candidate C due to optimal decryptor cyclomatic complexity (1-3)
     assert ranked[0]["chromosome_bytes"] == "31 c0 80 34 01"
+
+
+def test_fm_blx_r07_penalizes_compiler_prologues():
+    """FM-BLX-R07: Verifies compiler prologues/epilogues are heavily penalized vs decryptor logic."""
+    from src.tools.binlex_runner import rank_mutation_candidates
+
+    traits = [
+        # Candidate 1: Standard MSVC prologue (sub rsp, 0x18...)
+        {
+            "trait_type": "block",
+            "instructions": 5,
+            "cyclomatic_complexity": 1,
+            "trait_entropy": 4.5,
+            "chromosome_bytes": "83 ec 18 44 8b 4c 24 28",
+        },
+        # Candidate 2: Algorithmic decryptor loop (xor, shift)
+        {
+            "trait_type": "block",
+            "instructions": 5,
+            "cyclomatic_complexity": 2,
+            "trait_entropy": 4.5,
+            "chromosome_bytes": "31 c0 d3 e2 80 34 01 48",
+        },
+    ]
+
+    ranked = rank_mutation_candidates(traits, top_n=2)
+    assert ranked[0]["chromosome_bytes"] == "31 c0 d3 e2 80 34 01 48"

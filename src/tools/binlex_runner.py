@@ -147,11 +147,21 @@ def rank_mutation_candidates(traits: list[dict[str, Any]], top_n: int = 5) -> li
     Ranks basic block traits as candidates for predictive mutation simulation.
     Prioritizes blocks with moderate cyclomatic complexity (1-3, ideal for decryptor loops),
     substantial instruction count (>= 3 instructions), and non-zero entropy.
+    Penalizes function entry/exit compiler boilerplate (prologues, epilogues) and rewards
+    algorithmic / decryptor transformation opcodes (XOR, bitwise shifts, arithmetic).
     """
     candidates = [
         t for t in traits
         if t.get("trait_type") == "block" and t.get("instructions", 0) >= 3 and t.get("chromosome_bytes")
     ]
+
+    prologue_patterns = (
+        "55 48 89 e5", "55 89 e5",
+        "48 83 ec", "48 81 ec",
+        "83 ec", "81 ec",
+    )
+    epilogue_patterns = ("5d c3", "c9 c3")
+    algorithmic_opcodes = ("31 ", "33 ", "d3 ", "c1 ", "80 34 ", "80 30 ", "f7 ")
 
     def score_candidate(c: dict[str, Any]) -> float:
         # Decryption blocks typically have cyclomatic complexity 1 to 3
@@ -162,7 +172,20 @@ def rank_mutation_candidates(traits: list[dict[str, Any]], top_n: int = 5) -> li
         ent_weight = min(entropy / 5.0, 1.5)
         # Sufficient instruction length (5 to 25 instructions is typical for compact decryption/derivation stubs)
         instr = min(c.get("instructions", 0), 30)
-        return cc_weight * ent_weight * instr
+
+        base_score = cc_weight * ent_weight * instr
+
+        chrom = (c.get("chromosome_bytes") or "").lower().strip()
+
+        # Penalize compiler prologues / epilogues
+        if any(chrom.startswith(p) for p in prologue_patterns) or any(p in chrom for p in epilogue_patterns):
+            base_score *= 0.15
+
+        # Boost blocks containing characteristic algorithmic / decryptor operations
+        if any(op in chrom for op in algorithmic_opcodes):
+            base_score *= 2.0
+
+        return base_score
 
     candidates.sort(key=score_candidate, reverse=True)
     return candidates[:top_n]

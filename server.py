@@ -33,6 +33,7 @@ from src.harvester.malwarebazaar import (
 from src.mutation.operators import (
     Instruction,
     analyze_variant_mutation,
+    detect_register_mapping,
     generate_mutations,
 )
 from src.mutation.verifier import ESILVerifier
@@ -724,7 +725,10 @@ def simulate_mutations(
     for i, variant in enumerate(mutant_variants, 1):
         var_bytes = _block_to_bytes(variant)
         if orig_bytes and var_bytes:
-            is_inv, _, _ = verifier.verify_equivalence(orig_bytes, var_bytes, arch="x86", bits=64)
+            reg_map = detect_register_mapping(orig_instructions, variant)
+            is_inv, _, _ = verifier.verify_equivalence(
+                orig_bytes, var_bytes, arch="x86", bits=64, reg_map=reg_map
+            )
             if is_inv:
                 verified_byte_variants.append(var_bytes)
         else:

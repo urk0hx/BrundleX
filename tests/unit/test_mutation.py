@@ -239,3 +239,52 @@ def test_fm_mut_08_calculate_rule_metrics():
     assert metrics["wildcard_bytes"] == 1
     assert "67% Anchored / 33% Wildcarded" in metrics["resilience_score"]
     assert metrics["verdict"] == "High Resilience"
+
+
+def test_fm_mut_09_stack_pointer_serialization_barrier():
+    """FM-MUT-09: Stack pointer modifications act as hard serialization barriers."""
+    # sub rsp, 0x18 modifies rsp; mov r9d, [rsp + 0x28] accesses memory relative to rsp
+    inst_alloc = Instruction(mnemonic="sub", operands=["rsp", "0x18"], bytes_hex="4883ec18")
+    inst_mem = Instruction(mnemonic="mov", operands=["r9d", "dword ptr [rsp + 0x28]"], bytes_hex="448b4c2428")
+
+    assert can_reorder(inst_alloc, inst_mem) is False
+    assert can_reorder(inst_mem, inst_alloc) is False
+
+
+def test_fm_mut_10_use_before_def_hazard():
+    """FM-MUT-10: RAW hazard prevents use-before-def (e.g. mov edi, 1 vs shr edi, cl)."""
+    inst_def = Instruction(mnemonic="mov", operands=["edi", "1"], bytes_hex="bf01000000")
+    inst_use = Instruction(mnemonic="shr", operands=["edi", "cl"], bytes_hex="d3ef")
+
+    # Swapping would place shr before mov -> clobbers edi and reads uninitialized/stale state
+    assert can_reorder(inst_def, inst_use) is False
+
+
+def test_fm_mut_11_esil_verifier_catches_memory_divergence():
+    """FM-MUT-11: ESILVerifier verifies memory/stack state invariance even when registers match."""
+    verifier = ESILVerifier()
+
+    # Sequence with store to stack followed by register clobber:
+    # Orig: mov edi, 1; shr edi, cl; mov [rsp + 0x24], edi; lea rdi, [rbp - 0x20]
+    orig_bytes = bytes.fromhex("f7d9bf01000000d3ef40897c2424488d7de0")
+    # Buggy swap: shr edi, cl BEFORE mov edi, 1 -> stored value on stack differs!
+    buggy_bytes = bytes.fromhex("f7d9d3efbf0100000040897c2424488d7de0")
+
+    is_inv, _, _ = verifier.verify_equivalence(orig_bytes, buggy_bytes, arch="x86", bits=64)
+    assert is_inv is False
+
+
+def test_fm_mut_12_esil_verifier_with_reg_map():
+    """FM-MUT-12: ESILVerifier verifies isomorphic semantic equivalence with register mapping."""
+    verifier = ESILVerifier()
+
+    # xor rax, rax vs xor rbx, rbx
+    seq_rax = bytes.fromhex("4831c0")
+    seq_rbx = bytes.fromhex("4831db")
+
+    is_inv, _, states = verifier.verify_equivalence(
+        seq_rax, seq_rbx, arch="x86", bits=64, reg_map={"rax": "rbx"}
+    )
+    assert is_inv is True
+    assert states["original"]["rax"] == 0
+    assert states["mutant"]["rbx"] == 0
