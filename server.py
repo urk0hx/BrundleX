@@ -771,16 +771,26 @@ def simulate_mutations(
             "tactical_explanation": tactical["tactical_explanation"],
         })
 
+    # Formulate dynamic descriptive rule name including family, variant count, and aggression
+    clean_fam = "".join(c if c.isalnum() or c == "_" else "_" for c in threat_family).strip("_").lower() or "generic"
+    clean_input_rule = "".join(c if c.isalnum() or c == "_" else "_" for c in rule_name).strip("_")
+    base_name = re.sub(r"_a\d+_v\d+$", "", clean_input_rule)
+    if not base_name or base_name in ("brundlex_simulated_block", "brundlex_generic_decryptor"):
+        base_name = f"brundlex_{clean_fam}"
+    final_rule_name = f"{base_name}_a{aggression}_v{num_variants}"
+
     # Generate resilient YARA rule with metadata
     extra_meta = {
         "tlp": tlp,
         "severity": severity,
         "reference": reference,
+        "aggression": str(aggression),
+        "variants_count": str(len(mutant_variants)),
     }
 
     if verified_byte_variants:
         yara_rule = generate_resilient_yara(
-            rule_name=rule_name,
+            rule_name=final_rule_name,
             variants=verified_byte_variants,
             family=threat_family,
             author=author,
@@ -788,7 +798,7 @@ def simulate_mutations(
             extra_meta=extra_meta,
         )
     else:
-        yara_rule = f'rule {rule_name} {{\n    meta:\n        author = "{author}"\n    condition:\n        true\n}}\n'
+        yara_rule = f'rule {final_rule_name} {{\n    meta:\n        author = "{author}"\n    condition:\n        true\n}}\n'
 
     rule_metrics = calculate_rule_metrics(verified_byte_variants)
 
@@ -797,7 +807,7 @@ def simulate_mutations(
     context.studio_aggression = aggression
     context.studio_num_variants = num_variants
     context.mutation_results = {
-        "rule_name": rule_name,
+        "rule_name": final_rule_name,
         "yara": yara_rule,
         "reports": reports,
         "metrics": rule_metrics,
@@ -806,7 +816,7 @@ def simulate_mutations(
     # Record mutation history
     context.mutation_history.append({
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-        "rule_name": rule_name,
+        "rule_name": final_rule_name,
         "input_asm": "; ".join(inst.to_assembly() for inst in orig_instructions),
         "aggression": aggression,
         "variant_count": len(mutant_variants),
@@ -1019,9 +1029,16 @@ def load_candidate_to_studio(
                 "tactical_explanation": tactical["tactical_explanation"],
             })
 
+        cand_idx = 1
+        if context.current_state and context.current_state.candidate_blocks:
+            for idx, c in enumerate(context.current_state.candidate_blocks, 1):
+                if c.get("offset") == offset:
+                    cand_idx = idx
+                    break
+
         fam = context.current_state.llm_verdict.get("attribution", "Generic") if context.current_state and context.current_state.llm_verdict else "Generic"
-        clean_fam = "".join(c if c.isalnum() or c == "_" else "_" for c in fam).strip("_")
-        rule_name = f"brundlex_{clean_fam.lower()}_candidate_{hex(offset)}"
+        clean_fam = "".join(c if c.isalnum() or c == "_" else "_" for c in fam).strip("_").lower() or "generic"
+        rule_name = f"brundlex_{clean_fam}_candidate{cand_idx}_a2_v2"
         yara_rule = generate_resilient_yara(
             rule_name=rule_name,
             variants=verified_bytes,

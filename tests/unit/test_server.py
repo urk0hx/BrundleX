@@ -78,12 +78,15 @@ def test_fm_ui_02_mutation_simulation_and_yara_download(live_server):
     assert response.status_code == 200
     html = response.text
     assert "Equivalence Verification Reports" in html
-    assert "test_stealc_decryptor" in html
+    assert "test_stealc_decryptor_a2_v2" in html
+    assert "Download YARA" in html
 
     # Download rule
     dl_response = requests.get(f"{live_server}/mutation/download")
     assert dl_response.status_code == 200
-    assert "rule test_stealc_decryptor" in dl_response.text
+    assert "rule test_stealc_decryptor_a2_v2" in dl_response.text
+    assert 'aggression = "2"' in dl_response.text
+    assert 'variants_count = "2"' in dl_response.text
     assert ("$mutated_pattern" in dl_response.text or "$variant_1" in dl_response.text)
     assert 'author = "Analyst Unit Test"' in dl_response.text
 
