@@ -209,7 +209,7 @@ Adversaries recompile and modify decryptor loops to break static signatures. Bru
 ### 1. Select Target Binary
 - In the left sidebar under **Target Binary Selection**, choose a sample from the **Sample Library** (for example `Stealc Core`, `Lumma Stealer`, or `Redline Stealer`).
 - Or select **Custom File Path** to specify a local binary.
-- Or use **Upload Local Binary** to upload a file directly into the sandbox.
+- Or use **Upload Binary or ZIP Archive** to upload raw binaries or encrypted ZIP files (default password: `infected`).
 - The top header displays **SHA-256**, **SHA-1**, and **MD5** hashes. Click **Copy All** to copy all formatted hashes.
 
 ### 2. Execute Triage Pipeline
@@ -233,7 +233,8 @@ Adversaries recompile and modify decryptor loops to break static signatures. Bru
 - Click **Generate & Verify Invariant Mutations**.
 - Verify that variants display `VERIFIED` status in the ESIL verification table.
 - Expand **Configure YARA Rule Metadata** to customize rule metadata (Rule Name, Threat Family, Author, Severity, TLP).
-- Click **Download <rule_name>.yar** to save the signature.
+- Click **Download YARA** to export the synthesized signature with dynamic naming (e.g. `brundlex_lumma_a3_v4.yar`).
+- Deploy proactive signatures against unpacked artifacts or process memory buffers in platforms like **Unpac.me**, **Tria.ge**, or EDR feeds.
 
 ---
 
