@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import sqlite3
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ from src.agent.state import AnalysisState, NodeStatus
 from src.harvester.malwarebazaar import (
     HarvesterError,
     MalwareBazaarClient,
+    extract_sample_from_zip,
     process_sample_payload,
 )
 from src.mutation.operators import (
@@ -213,25 +215,44 @@ async def toggle_theme(request: Request):
     return RedirectResponse(url="/", status_code=303)
 
 
-def _save_upload(sample_file: UploadFile) -> Path:
-    filename = sample_file.filename or "uploaded_binary.bin"
-    safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
-    if not safe_filename:
-        safe_filename = "sample.bin"
-    dest_path = Path("data/uploads") / safe_filename
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(sample_file.file, buffer)
-    return dest_path
-
-
 @app.post("/triage/upload", response_class=HTMLResponse)
 async def upload_sample(
     request: Request,
     sample_file: UploadFile,
+    zip_password: str = Form("infected"),
 ):
-    """Handles direct malware or binary sample uploads from the analyst."""
+    """Handles direct malware, binary, or encrypted/unencrypted ZIP sample uploads from the analyst."""
     try:
-        dest_path = _save_upload(sample_file)
+        raw_bytes = await sample_file.read()
+        if not raw_bytes:
+            context.chat_messages.append({
+                "role": "assistant",
+                "content": "Uploaded file is empty (0 bytes).",
+            })
+            return templates.TemplateResponse(request=request, name="index.html", context=get_common_context())
+
+        filename = sample_file.filename or "uploaded_sample.bin"
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ") or "sample.bin"
+
+        # Check for ZIP archive (magic bytes PK\x03\x04 or .zip extension)
+        is_zip = raw_bytes.startswith(b"PK") or safe_filename.lower().endswith(".zip")
+
+        if is_zip:
+            scratch_dir = tempfile.mkdtemp(prefix="brundlex_zip_")
+            try:
+                pwd_bytes = zip_password.strip().encode() if zip_password else b"infected"
+                extracted_path = extract_sample_from_zip(raw_bytes, scratch_dir, password=pwd_bytes)
+                extracted_name = Path(extracted_path).name
+                dest_path = Path("data/uploads") / f"extracted_{extracted_name}"
+                shutil.copy2(extracted_path, dest_path)
+                status_msg = f"Extracted `{extracted_name}` ({dest_path.stat().st_size:,} bytes) from ZIP archive (`{safe_filename}`). Added to library & selected."
+            finally:
+                shutil.rmtree(scratch_dir, ignore_errors=True)
+        else:
+            dest_path = Path("data/uploads") / safe_filename
+            dest_path.write_bytes(raw_bytes)
+            status_msg = f"Uploaded sample `{dest_path.name}` ({dest_path.stat().st_size:,} bytes). Added to library & selected."
+
         sample_id = f"upload_{len(context.unpinned_samples) + 1}"
         context.unpinned_samples.append({
             "id": sample_id,
@@ -242,9 +263,14 @@ async def upload_sample(
         context.custom_sample_path = str(dest_path)
         context.chat_messages.append({
             "role": "assistant",
-            "content": f"Uploaded sample `{dest_path.name}` ({dest_path.stat().st_size:,} bytes). Added to library & selected.",
+            "content": status_msg,
         })
-    except OSError as e:
+    except HarvesterError as e:
+        context.chat_messages.append({
+            "role": "assistant",
+            "content": f"ZIP archive extraction failed: {e}. Check password or archive integrity.",
+        })
+    except Exception as e:  # noqa: BLE001
         context.chat_messages.append({
             "role": "assistant",
             "content": f"Upload failed: {e}",
@@ -665,7 +691,7 @@ def send_chat(
             ai_reply = llm.chat_completion_text(messages=chat_history, max_tokens=1500)
             if ai_reply and ai_reply.strip():
                 reply = ai_reply.strip()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.warning(f"Interactive LLM chat failed: {e}")
             reply = None
 

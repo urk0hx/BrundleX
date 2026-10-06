@@ -543,8 +543,12 @@ AUTHENTIHASH:{{ state.pe_hashes.get('authentihash')|upper }}{% endif %}</div>
         
         <!-- DIRECT FILE UPLOAD -->
         <form hx-post="/triage/upload" hx-target="#app-body" hx-swap="outerHTML" enctype="multipart/form-data" style="margin-bottom: 0.75rem;">
-          <label for="sample_file" style="font-size: 0.8rem; font-weight: 600;">Upload Local Binary</label>
+          <label for="sample_file" style="font-size: 0.8rem; font-weight: 600;">Upload Binary or ZIP Archive</label>
           <input type="file" id="sample_file" name="sample_file" required style="font-size: 0.8rem; margin-bottom: 0.35rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+            <label for="zip_password" style="font-size: 0.72rem; margin-bottom: 0; white-space: nowrap; color: var(--pico-muted-color);">ZIP Password:</label>
+            <input type="text" id="zip_password" name="zip_password" value="infected" placeholder="infected" style="font-size: 0.75rem; padding: 0.2rem 0.4rem; height: auto; margin-bottom: 0;">
+          </div>
           <button type="submit" class="outline" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; width: 100%; margin-bottom: 0.5rem;">Upload & Target</button>
         </form>
 

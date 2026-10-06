@@ -12,8 +12,10 @@ Failure Modes Covered:
 import io
 import threading
 import time
+import zipfile
 
 import pytest
+import pyzipper
 import requests
 import uvicorn
 
@@ -53,7 +55,7 @@ def test_fm_ui_01_index_loads_pico_and_htmx(live_server):
     assert "htmx.min.js" in html
     assert "BrundleX: AI-Guided Malware Triage & Predictive Trait Studio" in html
     assert "Target Binary Selection" in html
-    assert "Upload Local Binary" in html
+    assert "Upload Binary or ZIP Archive" in html
     assert "Genetic Threat DB" in html
     assert "theme-circle-btn" in html
 
@@ -112,6 +114,52 @@ def test_fm_ui_04_upload_sample(live_server):
     resp = requests.post(f"{live_server}/triage/upload", files=files)
     assert resp.status_code == 200
     assert "test_shellcode.bin" in context.custom_sample_path
+
+
+def test_fm_ui_04b_upload_encrypted_zip_sample(live_server):
+    """FM-UI-04b: Verifies uploading an encrypted ZIP extracts payload and selects it."""
+    buf = io.BytesIO()
+    with pyzipper.AESZipFile(buf, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(b"infected")
+        zf.writestr("lumma_payload.exe", b"MZ\x90\x00lumma")
+    buf.seek(0)
+
+    files = {"sample_file": ("lumma_sample.zip", buf, "application/zip")}
+    data = {"zip_password": "infected"}
+    resp = requests.post(f"{live_server}/triage/upload", files=files, data=data)
+    assert resp.status_code == 200
+    assert "lumma_payload.exe" in context.custom_sample_path
+    assert any("Extracted `lumma_payload.exe`" in m.get("content", "") for m in context.chat_messages)
+
+
+def test_fm_ui_04c_upload_unencrypted_zip_sample(live_server):
+    """FM-UI-04c: Verifies uploading an unencrypted ZIP with default password succeeds smoothly."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plain_payload.bin", b"MZ\x90plain")
+    buf.seek(0)
+
+    files = {"sample_file": ("plain_archive.zip", buf, "application/zip")}
+    data = {"zip_password": "infected"}
+    resp = requests.post(f"{live_server}/triage/upload", files=files, data=data)
+    assert resp.status_code == 200
+    assert "plain_payload.bin" in context.custom_sample_path
+    assert any("Extracted `plain_payload.bin`" in m.get("content", "") for m in context.chat_messages)
+
+
+def test_fm_ui_04d_upload_zip_wrong_password(live_server):
+    """FM-UI-04d: Verifies uploading an encrypted ZIP with wrong password fails gracefully with alert."""
+    buf = io.BytesIO()
+    with pyzipper.AESZipFile(buf, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(b"infected")
+        zf.writestr("secret.exe", b"MZ\x90secret")
+    buf.seek(0)
+
+    files = {"sample_file": ("encrypted_secret.zip", buf, "application/zip")}
+    data = {"zip_password": "wrongpassword"}
+    resp = requests.post(f"{live_server}/triage/upload", files=files, data=data)
+    assert resp.status_code == 200
+    assert any("ZIP archive extraction failed" in m.get("content", "") for m in context.chat_messages)
 
 
 def test_fm_ui_05_pin_unpin_samples(live_server):
